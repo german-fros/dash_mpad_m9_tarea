@@ -26,7 +26,7 @@ app = Dash(
 )
 
 # Importar páginas después de crear app
-from pages import login
+from pages import login, home, performance, gps
 
 # Layout manual con routing
 app.layout = dbc.Container([
@@ -34,7 +34,6 @@ app.layout = dbc.Container([
     html.Div(id='page-content')
 ])
 
-# Callback del login
 @app.callback(
     Output('page-content', 'children'),
     Input('url', 'pathname')
@@ -45,22 +44,25 @@ def display_page(pathname):
     elif pathname == '/' or pathname is None:
         # Verificar autenticación para página principal
         if current_user.is_authenticated:
-            return html.Div([
-                html.H1("Página principal"),
-                html.P("Bienvenido, estás logueado"),
-                dbc.Button("Cerrar Sesión", id="logout-button", color="secondary"),
-                html.Div(id="logout-output"),
-            ])
+            return home.layout
         else:
-            # Redirigir a login si no está autenticado
+            return dcc.Location(href="/login", id="redirect-to-login")
+    elif pathname == '/performance':
+        if current_user.is_authenticated:
+            return performance.layout
+        else:
+            return dcc.Location(href="/login", id="redirect-to-login")
+    elif pathname == '/gps':
+        if current_user.is_authenticated:
+            return gps.layout
+        else:
             return dcc.Location(href="/login", id="redirect-to-login")
     else:
-        # Para rutas no encontradas
         return html.Div([
             html.H1("404 - Página no encontrada"),
             dcc.Link("Ir a Login", href="/login")
         ])
-    
+
 @app.callback(
     Output("login-output", "children"),
     Input("login-button", "n_clicks"),
@@ -68,7 +70,6 @@ def display_page(pathname):
     State("password", "value"),
     prevent_initial_call=True
 )
-    
 def login_callback(n_clicks, username, password):
     if username and password:
         user = get_user(username)
@@ -80,7 +81,6 @@ def login_callback(n_clicks, username, password):
     else:
         return dbc.Alert("Complete todos los campos", color="warning")
 
-# Callback del logout
 @app.callback(
     Output("logout-output", "children"),
     Input("logout-button", "n_clicks"),
@@ -92,4 +92,3 @@ def logout_callback(n_clicks):
 
 if __name__ == "__main__":
     app.run(debug=True)
-
