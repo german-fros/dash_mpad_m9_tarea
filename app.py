@@ -1,7 +1,7 @@
 from dash import Dash, dcc, html, Input, Output, State
 import dash_bootstrap_components as dbc
 from flask import Flask
-from flask_login import LoginManager, login_user, logout_user, login_required
+from flask_login import LoginManager, login_user, logout_user, current_user
 
 from login_manager import get_user
 
@@ -41,12 +41,22 @@ app.layout = dbc.Container([
 def display_page(pathname):
     if pathname == '/login':
         return login.layout
+    elif pathname == '/' or pathname is None:
+        # Verificar autenticación para página principal
+        if current_user.is_authenticated:
+            return html.Div([
+                html.H1("Página principal"),
+                html.P("Bienvenido, estás logueado"),
+                dbc.Button("Cerrar Sesión", id="logout-button", color="secondary"),
+                html.Div(id="logout-output"),
+            ])
+        else:
+            # Redirigir a login si no está autenticado
+            return dcc.Location(href="/login", id="redirect-to-login")
     else:
+        # Para rutas no encontradas
         return html.Div([
-            html.H1("Página principal"),
-            html.P("Bienvenido, estás logueado"),
-            dbc.Button("Cerrar Sesión", id="logout-button", color="secondary"),
-            html.Div(id="logout-output"),
+            html.H1("404 - Página no encontrada"),
             dcc.Link("Ir a Login", href="/login")
         ])
 
