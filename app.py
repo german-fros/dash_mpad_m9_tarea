@@ -34,6 +34,7 @@ app.layout = dbc.Container([
     html.Div(id='page-content')
 ])
 
+# Callback del login
 @app.callback(
     Output('page-content', 'children'),
     Input('url', 'pathname')
@@ -59,8 +60,7 @@ def display_page(pathname):
             html.H1("404 - Página no encontrada"),
             dcc.Link("Ir a Login", href="/login")
         ])
-
-# Callback del login
+    
 @app.callback(
     Output("login-output", "children"),
     Input("login-button", "n_clicks"),
@@ -68,12 +68,17 @@ def display_page(pathname):
     State("password", "value"),
     prevent_initial_call=True
 )
+    
 def login_callback(n_clicks, username, password):
-    user = get_user(username)
-    if user and password == user.password:
-        login_user(user)
-        return dcc.Location(href="/", id="redirect")
-    return dbc.Alert("Credenciales incorrectas", color="danger")
+    if username and password:
+        user = get_user(username)
+        if user and password == user.password:
+            login_user(user)
+            return dcc.Location(href="/", id="redirect")
+        else:
+            return dbc.Alert("Credenciales incorrectas", color="danger")
+    else:
+        return dbc.Alert("Complete todos los campos", color="warning")
 
 # Callback del logout
 @app.callback(
