@@ -194,3 +194,4 @@ cython_debug/
 .cursorindexingignore
 
 venv/
+procesar_data.ipynb
