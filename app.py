@@ -169,8 +169,8 @@ def login_callback(n_clicks, username, password):
         
         # Intentar autenticación
         try:
-            user = authenticate_user(username.strip(), password.strip())
-            if user:
+            user = get_user(username.strip())
+            if user and password.strip() == user.password:
                 login_user(user)
                 logger.info(f"Login exitoso para usuario: {username}")
                 return dcc.Location(href="/", id="redirect")
