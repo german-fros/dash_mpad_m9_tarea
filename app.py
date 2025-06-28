@@ -2,66 +2,147 @@ from dash import Dash, dcc, html, Input, Output, State
 import dash_bootstrap_components as dbc
 from flask import Flask
 from flask_login import LoginManager, login_user, logout_user, current_user
+import logging
+import traceback
 
 from login_manager import get_user
+
+# Configurar logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('app.log'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
 
 # Flask base
 server = Flask(__name__)
 server.secret_key = 'super-secret-key'
 
-# Login manager
+# Login manager con manejo de errores
 login_manager = LoginManager()
-login_manager.init_app(server)
+try:
+    login_manager.init_app(server)
+    logger.info("Login manager inicializado correctamente")
+except Exception as e:
+    logger.error(f"Error inicializando login manager: {str(e)}")
+    raise
 
 @login_manager.user_loader
 def load_user(user_id):
-    return get_user(user_id)
+    """Cargar usuario con manejo de errores"""
+    try:
+        user = get_user(user_id)
+        if user:
+            logger.info(f"Usuario {user_id} cargado correctamente")
+        return user
+    except Exception as e:
+        logger.error(f"Error cargando usuario {user_id}: {str(e)}")
+        return None
 
-# Dash app SIN use_pages
-app = Dash(
-    __name__,
-    server=server,
-    external_stylesheets=[dbc.themes.BOOTSTRAP],
-    suppress_callback_exceptions=True
-)
+# Dash app
+try:
+    app = Dash(
+        __name__,
+        server=server,
+        external_stylesheets=[dbc.themes.BOOTSTRAP],
+        suppress_callback_exceptions=True
+    )
+    logger.info("Aplicación Dash inicializada correctamente")
+except Exception as e:
+    logger.error(f"Error inicializando aplicación Dash: {str(e)}")
+    raise
 
-# Importar páginas después de crear app
-from pages import login, home, performance, gps
+# Importar páginas con manejo de errores
+try:
+    from pages import login, home, performance, gps
+    logger.info("Páginas importadas correctamente")
+except ImportError as e:
+    logger.error(f"Error importando páginas: {str(e)}")
+    # Crear layouts de fallback
+    class FallbackPage:
+        layout = html.Div([
+            dbc.Alert("Error cargando página", color="danger"),
+            html.P("Por favor, recarga la aplicación")
+        ])
+    
+    login = home = performance = gps = FallbackPage()
 
-# Layout manual con routing
-app.layout = dbc.Container([
-    dcc.Location(id='url', refresh=False),
-    html.Div(id='page-content')
-])
+# Layout principal con manejo de errores
+try:
+    app.layout = dbc.Container([
+        dcc.Location(id='url', refresh=False),
+        html.Div(id='page-content')
+    ])
+    logger.info("Layout principal configurado correctamente")
+except Exception as e:
+    logger.error(f"Error configurando layout: {str(e)}")
+    app.layout = html.Div("Error de configuración")
 
 @app.callback(
     Output('page-content', 'children'),
-    Input('url', 'pathname')
+    Input('url', 'pathname'),
+    prevent_initial_call=False
 )
 def display_page(pathname):
-    if pathname == '/login':
-        return login.layout
-    elif pathname == '/' or pathname is None:
-        # Verificar autenticación para página principal
-        if current_user.is_authenticated:
-            return home.layout
+    """Routing con manejo de errores"""
+    try:
+        # Validar pathname
+        if pathname is None:
+            pathname = '/'
+        
+        logger.info(f"Navegando a: {pathname}")
+        
+        if pathname == '/login':
+            return login.layout
+        elif pathname == '/' or pathname == '':
+            # Verificar autenticación
+            try:
+                if current_user.is_authenticated:
+                    return home.layout
+                else:
+                    logger.info("Usuario no autenticado, redirigiendo a login")
+                    return dcc.Location(href="/login", id="redirect-to-login")
+            except Exception as auth_error:
+                logger.error(f"Error verificando autenticación: {str(auth_error)}")
+                return dcc.Location(href="/login", id="redirect-to-login")
+                
+        elif pathname == '/performance':
+            try:
+                if current_user.is_authenticated:
+                    return performance.layout
+                else:
+                    return dcc.Location(href="/login", id="redirect-to-login")
+            except Exception as auth_error:
+                logger.error(f"Error en página performance: {str(auth_error)}")
+                return dbc.Alert("Error cargando página de performance", color="danger")
+                
+        elif pathname == '/gps':
+            try:
+                if current_user.is_authenticated:
+                    return gps.layout
+                else:
+                    return dcc.Location(href="/login", id="redirect-to-login")
+            except Exception as auth_error:
+                logger.error(f"Error en página GPS: {str(auth_error)}")
+                return dbc.Alert("Error cargando página GPS", color="danger")
         else:
-            return dcc.Location(href="/login", id="redirect-to-login")
-    elif pathname == '/performance':
-        if current_user.is_authenticated:
-            return performance.layout
-        else:
-            return dcc.Location(href="/login", id="redirect-to-login")
-    elif pathname == '/gps':
-        if current_user.is_authenticated:
-            return gps.layout
-        else:
-            return dcc.Location(href="/login", id="redirect-to-login")
-    else:
-        return html.Div([
-            html.H1("404 - Página no encontrada"),
-            dcc.Link("Ir a Login", href="/login")
-        ])
+            logger.warning(f"Página no encontrada: {pathname}")
+            return html.Div([
+                dbc.Alert("404 - Página no encontrada", color="warning"),
+                dbc.Button("Ir a Home", href="/", color="primary")
+            ])
+            
+    except Exception as e:
+        logger.error(f"Error en display_page: {str(e)}\n{traceback.format_exc()}")
+        return dbc.Alert([
+            html.H4("Error de navegación"),
+            html.P(f"Ha ocurrido un error: {str(e)}"),
+            dbc.Button("Ir a Login", href="/login", color="primary")
+        ], color="danger")
 
 @app.callback(
     Output("login-output", "children"),
@@ -71,15 +152,39 @@ def display_page(pathname):
     prevent_initial_call=True
 )
 def login_callback(n_clicks, username, password):
-    if username and password:
-        user = get_user(username)
-        if user and password == user.password:
-            login_user(user)
-            return dcc.Location(href="/", id="redirect")
-        else:
-            return dbc.Alert("Credenciales incorrectas", color="danger")
-    else:
-        return dbc.Alert("Complete todos los campos", color="warning")
+    """Login con manejo de errores"""
+    try:
+        # Validar que se hizo click
+        if not n_clicks or n_clicks == 0:
+            return ""
+        
+        # Validar inputs
+        if not username or not password:
+            logger.warning("Intento de login con campos vacíos")
+            return dbc.Alert("Por favor complete todos los campos", color="warning")
+        
+        # Validar longitud
+        if len(username.strip()) == 0 or len(password.strip()) == 0:
+            return dbc.Alert("Los campos no pueden estar vacíos", color="warning")
+        
+        # Intentar autenticación
+        try:
+            user = get_user(username.strip())
+            if user and password.strip() == user.password:
+                login_user(user)
+                logger.info(f"Login exitoso para usuario: {username}")
+                return dcc.Location(href="/", id="redirect")
+            else:
+                logger.warning(f"Intento de login fallido para usuario: {username}")
+                return dbc.Alert("Credenciales incorrectas", color="danger")
+                
+        except Exception as auth_error:
+            logger.error(f"Error en autenticación: {str(auth_error)}")
+            return dbc.Alert("Error interno de autenticación", color="danger")
+            
+    except Exception as e:
+        logger.error(f"Error en login_callback: {str(e)}\n{traceback.format_exc()}")
+        return dbc.Alert("Error interno del sistema", color="danger")
 
 @app.callback(
     Output("logout-output", "children"),
@@ -87,18 +192,62 @@ def login_callback(n_clicks, username, password):
     prevent_initial_call=True
 )
 def logout_callback(n_clicks):
-    logout_user()
-    return dcc.Location(href="/login", id="redirect-logout")
+    """Logout con manejo de errores"""
+    try:
+        if not n_clicks or n_clicks == 0:
+            return ""
+            
+        try:
+            if current_user.is_authenticated:
+                username = current_user.id
+                logout_user()
+                logger.info(f"Logout exitoso para usuario: {username}")
+            else:
+                logger.info("Intento de logout sin usuario autenticado")
+                
+            return dcc.Location(href="/login", id="redirect-logout")
+            
+        except Exception as logout_error:
+            logger.error(f"Error en logout: {str(logout_error)}")
+            # Forzar redirección a login aunque haya error
+            return dcc.Location(href="/login", id="redirect-logout")
+            
+    except Exception as e:
+        logger.error(f"Error en logout_callback: {str(e)}\n{traceback.format_exc()}")
+        return dcc.Location(href="/login", id="redirect-logout")
 
-# Agregar después del callback de logout existente
+# Callback para logout desde navbar (si existe)
 @app.callback(
     Output("navbar-logout", "n_clicks"),
     Input("navbar-logout", "n_clicks"),
     prevent_initial_call=True
 )
 def navbar_logout_callback(n_clicks):
-    logout_user()
-    return dcc.Location(href="/login", id="navbar-redirect")
+    """Logout desde navbar con manejo de errores"""
+    try:
+        if not n_clicks or n_clicks == 0:
+            return 0
+            
+        try:
+            if current_user.is_authenticated:
+                username = current_user.id
+                logout_user()
+                logger.info(f"Logout desde navbar exitoso para usuario: {username}")
+            
+            return dcc.Location(href="/login", id="navbar-redirect")
+            
+        except Exception as logout_error:
+            logger.error(f"Error en logout navbar: {str(logout_error)}")
+            return dcc.Location(href="/login", id="navbar-redirect")
+            
+    except Exception as e:
+        logger.error(f"Error en navbar_logout_callback: {str(e)}")
+        return 0
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    try:
+        logger.info("Iniciando aplicación...")
+        app.run(debug=True)
+    except Exception as e:
+        logger.error(f"Error iniciando aplicación: {str(e)}")
+        raise
