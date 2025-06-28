@@ -90,5 +90,15 @@ def logout_callback(n_clicks):
     logout_user()
     return dcc.Location(href="/login", id="redirect-logout")
 
+# Agregar después del callback de logout existente
+@app.callback(
+    Output("navbar-logout", "n_clicks"),
+    Input("navbar-logout", "n_clicks"),
+    prevent_initial_call=True
+)
+def navbar_logout_callback(n_clicks):
+    logout_user()
+    return dcc.Location(href="/login", id="navbar-redirect")
+
 if __name__ == "__main__":
     app.run(debug=True)
