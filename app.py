@@ -58,7 +58,21 @@ except Exception as e:
 
 # Importar páginas con manejo de errores
 try:
-    from pages import login, home, performance, gps
+    from pages.login import layout as login_layout
+    from pages.home import layout as home_layout  
+    from pages.performance import layout as performance_layout
+    from pages.gps import layout as gps_layout
+
+    # Crear objetos página simples
+    class SimplePage:
+        def __init__(self, layout):
+            self.layout = layout
+
+    login = SimplePage(login_layout)
+    home = SimplePage(home_layout)
+    performance = SimplePage(performance_layout)
+    gps = SimplePage(gps_layout)
+    
     logger.info("Páginas importadas correctamente")
 except ImportError as e:
     logger.error(f"Error importando páginas: {str(e)}")
@@ -216,9 +230,9 @@ def logout_callback(n_clicks):
         logger.error(f"Error en logout_callback: {str(e)}\n{traceback.format_exc()}")
         return dcc.Location(href="/login", id="redirect-logout")
 
-# Callback para logout desde navbar (si existe)
+# Callback para logout desde navbar (ARREGLADO)
 @app.callback(
-    Output("navbar-logout", "n_clicks"),
+    Output("url", "pathname"),
     Input("navbar-logout", "n_clicks"),
     prevent_initial_call=True
 )
@@ -226,7 +240,7 @@ def navbar_logout_callback(n_clicks):
     """Logout desde navbar con manejo de errores"""
     try:
         if not n_clicks or n_clicks == 0:
-            return 0
+            return "/"
             
         try:
             if current_user.is_authenticated:
@@ -234,20 +248,20 @@ def navbar_logout_callback(n_clicks):
                 logout_user()
                 logger.info(f"Logout desde navbar exitoso para usuario: {username}")
             
-            return dcc.Location(href="/login", id="navbar-redirect")
+            return "/login"
             
         except Exception as logout_error:
             logger.error(f"Error en logout navbar: {str(logout_error)}")
-            return dcc.Location(href="/login", id="navbar-redirect")
+            return "/login"
             
     except Exception as e:
         logger.error(f"Error en navbar_logout_callback: {str(e)}")
-        return 0
+        return "/"
 
 if __name__ == "__main__":
     try:
         logger.info("Iniciando aplicación...")
-        app.run(debug=True)
+        app.run(debug=True, dev_tools_ui=True, dev_tools_hot_reload=True)
     except Exception as e:
         logger.error(f"Error iniciando aplicación: {str(e)}")
         raise
