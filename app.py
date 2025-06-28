@@ -5,7 +5,7 @@ from flask_login import LoginManager, login_user, logout_user, current_user
 import logging
 import traceback
 
-from login_manager import get_user
+from login_manager import get_user, authenticate_user
 
 # Configurar logging
 logging.basicConfig(
@@ -169,8 +169,8 @@ def login_callback(n_clicks, username, password):
         
         # Intentar autenticación
         try:
-            user = get_user(username.strip())
-            if user and password.strip() == user.password:
+            user = authenticate_user(username.strip(), password.strip())
+            if user:
                 login_user(user)
                 logger.info(f"Login exitoso para usuario: {username}")
                 return dcc.Location(href="/", id="redirect")
