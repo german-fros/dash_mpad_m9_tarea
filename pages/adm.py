@@ -153,9 +153,8 @@ layout = html.Div([
                                 dbc.Label("Club"),
                                 dcc.Dropdown(
                                     id='club-filter-adm',
-                                    options=[{'label': 'Todos', 'value': 'all'}] + 
-                                           [{'label': club, 'value': club} for club in sorted(df_contracts['Club'].unique())],
-                                    value='all',
+                                    options=[{'label': club, 'value': club} for club in sorted(df_contracts['Club'].unique())],
+                                    value=sorted(df_contracts['Club'].unique())[0],
                                     placeholder="Seleccionar club",
                                     style={'zIndex': 1050}
                                 )
@@ -205,7 +204,7 @@ layout = html.Div([
             
             dbc.Col([
                 dbc.Card([
-                    dbc.CardHeader(html.H5("Contratos por Club y Año")),
+                    dbc.CardHeader(html.H5("Contratos que Vencen por Semestre")),
                     dbc.CardBody([
                         dcc.Graph(id='contracts-timeline-chart')
                     ])
@@ -218,8 +217,12 @@ layout = html.Div([
             dbc.Col([
                 dbc.Card([
                     dbc.CardHeader([
-                        html.H5("Tabla de Contratos", className="mb-0"),
-                        html.Small("Datos filtrados según selección", className="text-muted")
+                        html.H5("Contratos Activos", className="mb-0"),
+                        dbc.ButtonGroup([
+                            dbc.Button("Por Fecha Fin", id="sort-date", color="primary", size="sm"),
+                            dbc.Button("Por Posición", id="sort-position", color="outline-secondary", size="sm"),
+                            dbc.Button("Por Salario", id="sort-salary", color="outline-info", size="sm")
+                        ], className="float-end")
                     ]),
                     dbc.CardBody([
                         html.Div(id='contracts-table')
@@ -235,19 +238,36 @@ layout = html.Div([
 @callback(
     [Output('salary-position-chart', 'figure'),
      Output('contracts-timeline-chart', 'figure'),
-     Output('contracts-table', 'children')],
+     Output('contracts-table', 'children'),
+     Output('sort-date', 'color'),
+     Output('sort-position', 'color'),
+     Output('sort-salary', 'color')],
     [Input('club-filter-adm', 'value'),
      Input('position-filter-adm', 'value'),
-     Input('salary-range-adm', 'value')]
+     Input('salary-range-adm', 'value'),
+     Input('sort-date', 'n_clicks'),
+     Input('sort-position', 'n_clicks'),
+     Input('sort-salary', 'n_clicks')]
 )
-def update_admin_dashboard(club_filter, position_filter, salary_range):
+def update_admin_dashboard(club_filter, position_filter, salary_range, sort_date, sort_position, sort_salary):
     """Actualizar dashboard administrativo basado en filtros"""
+    
+    # Importar ctx para saber qué botón se presionó
+    from dash import ctx
+    
+    # Determinar qué botón fue presionado y establecer colores
+    button_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else 'sort-date'
+    
+    # Colores de botones según cuál está seleccionado
+    date_color = "primary" if button_id == 'sort-date' else "outline-primary"
+    position_color = "success" if button_id == 'sort-position' else "outline-success"
+    salary_color = "info" if button_id == 'sort-salary' else "outline-info"
     
     # Filtrar datos
     filtered_df = df_contracts.copy()
     
-    if club_filter != 'all':
-        filtered_df = filtered_df[filtered_df['Club'] == club_filter]
+    # Siempre filtrar por el club seleccionado (ya no hay opción 'all')
+    filtered_df = filtered_df[filtered_df['Club'] == club_filter]
     
     if position_filter != 'all':
         filtered_df = filtered_df[filtered_df['Posicion_Simplificada'] == position_filter]
@@ -268,31 +288,74 @@ def update_admin_dashboard(club_filter, position_filter, salary_range):
         y='Salario_mensual_usd',
         title="Salario Promedio Mensual por Posición",
         labels={'Posicion_Simplificada': 'Posición', 'Salario_mensual_usd': 'Salario Promedio (USD)'},
-        color='Salario_mensual_usd',
-        color_continuous_scale='viridis'
+        color_discrete_sequence=['#1f77b4']
     )
     fig1.update_layout(height=400, showlegend=False)
     fig1.update_yaxes(tickformat='$,.0f')
     
-    # Gráfico 2: Contratos por club y año
-    contracts_by_year_club = filtered_df.groupby(['Año_Inicio', 'Club']).size().reset_index(name='Numero_Contratos')
+    # Gráfico 2: Contratos que vencen en los próximos semestres
+    from datetime import datetime, timedelta
     
-    fig2 = px.bar(
-        contracts_by_year_club,
-        x='Año_Inicio',
-        y='Numero_Contratos',
-        color='Club',
-        title="Número de Contratos por Club y Año de Inicio",
-        labels={'Año_Inicio': 'Año de Inicio', 'Numero_Contratos': 'Número de Contratos'},
-        barmode='stack'
-    )
+    # Filtrar contratos que vencen en los próximos 3 años (6 semestres)
+    today = datetime.now()
+    next_three_years = today + timedelta(days=1095)  # 3 años
+    
+    expiring_contracts = filtered_df[
+        (filtered_df['Fecha_fin'] >= today) & 
+        (filtered_df['Fecha_fin'] <= next_three_years)
+    ].copy()
+    
+    if len(expiring_contracts) > 0:
+        # Calcular semestre de vencimiento
+        def get_semester(date):
+            year = date.year
+            if date.month <= 6:
+                return f"{year}-1"  # Primer semestre
+            else:
+                return f"{year}-2"  # Segundo semestre
+        
+        expiring_contracts['Semestre_Vencimiento'] = expiring_contracts['Fecha_fin'].apply(get_semester)
+        
+        # Agrupar por semestre
+        contracts_by_semester = expiring_contracts.groupby('Semestre_Vencimiento').size().reset_index(name='Contratos_Vencen')
+        contracts_by_semester = contracts_by_semester.sort_values('Semestre_Vencimiento')
+        
+        fig2 = px.bar(
+            contracts_by_semester,
+            x='Semestre_Vencimiento',
+            y='Contratos_Vencen',
+            title="Contratos que Vencen en los Próximos Semestres",
+            labels={'Semestre_Vencimiento': 'Semestre', 'Contratos_Vencen': 'Número de Contratos'},
+            color_discrete_sequence=['#ff7f0e']
+        )
+    else:
+        # Si no hay contratos que vencen, mostrar gráfico vacío
+        fig2 = px.bar(
+            pd.DataFrame({'Semestre': ['Sin datos'], 'Contratos': [0]}),
+            x='Semestre',
+            y='Contratos',
+            title="Contratos que Vencen en los Próximos Semestres",
+            labels={'Semestre': 'Semestre', 'Contratos': 'Número de Contratos'}
+        )
+    
     fig2.update_layout(height=400)
     
-    # Tabla de contratos (solo activos)
+    # Tabla de contratos ordenada según botón seleccionado
     table_data = filtered_df[[
         'Jugador', 'Posicion_Simplificada', 'Club', 'Fecha_inicio', 'Fecha_fin', 
         'Salario_mensual_usd', 'Cláusula_rescisión_usd'
     ]].copy()
+    
+    # Determinar ordenamiento basado en el botón presionado
+    if button_id == 'sort-position':
+        table_data = table_data.sort_values('Posicion_Simplificada')
+    elif button_id == 'sort-salary':
+        table_data = table_data.sort_values('Salario_mensual_usd', ascending=False)
+    else:  # default: sort-date
+        table_data = table_data.sort_values('Fecha_fin')
+    
+    # Tomar los primeros 15 registros después del ordenamiento
+    table_data = table_data.head(15)
     
     # Formatear fechas y monedas para la tabla
     table_data['Fecha_inicio'] = table_data['Fecha_inicio'].dt.strftime('%d/%m/%Y')
@@ -310,14 +373,13 @@ def update_admin_dashboard(club_filter, position_filter, salary_range):
         style_header={'backgroundColor': 'rgb(230, 230, 230)', 'fontWeight': 'bold'},
         style_data_conditional=[
             {
-                'if': {'row_index': 'odd'},
-                'backgroundColor': 'rgb(248, 248, 248)'
+                'if': {'row_index': 0},
+                'backgroundColor': '#d4edda',
+                'color': 'black',
             }
         ],
-        sort_action="native",
-        filter_action="native",
         page_size=15,
         style_table={'overflowX': 'auto'}
     )
     
-    return fig1, fig2, table
+    return fig1, fig2, table, date_color, position_color, salary_color
