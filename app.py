@@ -61,7 +61,7 @@ try:
     from pages.login import layout as login_layout
     from pages.home import layout as home_layout  
     from pages.performance import layout as performance_layout
-    from pages.adm import layout as gps_layout
+    from pages.adm import layout as adm_layout
 
     # Crear objetos página simples
     class SimplePage:
@@ -71,7 +71,7 @@ try:
     login = SimplePage(login_layout)
     home = SimplePage(home_layout)
     performance = SimplePage(performance_layout)
-    gps = SimplePage(gps_layout)
+    adm = SimplePage(adm_layout)
     
     logger.info("Páginas importadas correctamente")
 except ImportError as e:
@@ -83,7 +83,7 @@ except ImportError as e:
             html.P("Por favor, recarga la aplicación")
         ])
     
-    login = home = performance = gps = FallbackPage()
+    login = home = performance = adm = FallbackPage()
 
 # Layout principal con manejo de errores
 try:
@@ -134,15 +134,15 @@ def display_page(pathname):
                 logger.error(f"Error en página performance: {str(auth_error)}")
                 return dbc.Alert("Error cargando página de performance", color="danger")
                 
-        elif pathname == '/gps':
+        elif pathname == '/administrativo':
             try:
                 if current_user.is_authenticated:
-                    return gps.layout
+                    return adm.layout
                 else:
                     return dcc.Location(href="/login", id="redirect-to-login")
             except Exception as auth_error:
-                logger.error(f"Error en página GPS: {str(auth_error)}")
-                return dbc.Alert("Error cargando página GPS", color="danger")
+                logger.error(f"Error en página administrativa: {str(auth_error)}")
+                return dbc.Alert("Error cargando página administrativa", color="danger")
         else:
             logger.warning(f"Página no encontrada: {pathname}")
             return html.Div([

@@ -29,9 +29,9 @@ layout = html.Div([
                     dbc.Col([
                         dbc.Card([
                             dbc.CardBody([
-                                html.H4("Dashboard GPS", className="card-title"),
-                                html.P("Análisis de datos de tracking y movimiento GPS"),
-                                dbc.Button("Acceder", color="success", href="/gps")
+                                html.H4("Dashboard Administrativo", className="card-title"),
+                                html.P("Análisis de contratos y gestión financiera de jugadores"),
+                                dbc.Button("Acceder", color="success", href="/administrativo")
                             ])
                         ])
                     ], md=6)
