@@ -291,33 +291,31 @@ def update_dashboard(season_filter, team_filter, sort_goals, sort_assists, sort_
     if team_filter != 'all':
         filtered_df = filtered_df[filtered_df['Team'] == team_filter]
     
-    # Calcular eficiencia de goles (Goals/Shots)
-    filtered_df['Goal_Efficiency'] = filtered_df.apply(
-        lambda row: row['Goals'] / row['Shots'] if row['Shots'] > 0 else 0, axis=1
-    )
+    # Filtrar jugadores con mínimo 10 disparos intentados
+    filtered_df = filtered_df[filtered_df['Shots'] >= 10]
     
-    # Gráfico 1: Goles vs Eficiencia de Goles
-    hover_data = ['Player', 'Position', 'Temporada', 'Shots'] if season_filter != 'all' else ['Player', 'Position', 'Shots']
+    # Gráfico 1: Goles vs Disparos Intentados
+    hover_data = ['Player', 'Goals', 'Shots', 'Team']
     
     fig1 = px.scatter(
         filtered_df, 
-        x='Goal_Efficiency', 
+        x='Shots', 
         y='Goals',
         color='Team',
         size='Minutes_played',
         hover_data=hover_data,
-        title=f"Goles vs Eficiencia de Goles (Goles/Disparos) {'(Acumulado todas las temporadas)' if season_filter == 'all' else f'(Temporada {season_filter})'}",
-        labels={'Goal_Efficiency': 'Eficiencia de Goles (Goles/Disparos)', 'Goals': 'Goles Totales'}
+        title=f"Goles vs Disparos Intentados {'(Acumulado todas las temporadas)' if season_filter == 'all' else f'(Temporada {season_filter})'}",
+        labels={'Shots': 'Disparos Intentados', 'Goals': 'Goles Totales'}
     )
     
-    # Agregar línea de referencia para eficiencia promedio si hay datos
-    if len(filtered_df) > 0 and filtered_df['Goal_Efficiency'].max() > 0:
-        avg_efficiency = filtered_df['Goal_Efficiency'].mean()
+    # Agregar línea de referencia para disparos promedio si hay datos
+    if len(filtered_df) > 0:
+        avg_shots = filtered_df['Shots'].mean()
         fig1.add_vline(
-            x=avg_efficiency,
+            x=avg_shots,
             line_dash="dash",
             line_color="red",
-            annotation_text=f"Eficiencia promedio: {avg_efficiency:.3f}"
+            annotation_text=f"Disparos promedio: {avg_shots:.1f}"
         )
     
     fig1.update_layout(
