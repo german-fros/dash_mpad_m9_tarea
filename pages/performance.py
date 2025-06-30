@@ -5,6 +5,15 @@ import plotly.express as px
 import plotly.graph_objects as go
 import sys
 import os
+import base64
+from io import BytesIO
+from reportlab.lib.pagesizes import letter, A4
+from reportlab.lib import colors
+from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
+from reportlab.lib.units import inch
+import plotly.io as pio
+from datetime import datetime
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from components.navbar import create_navbar
@@ -124,6 +133,7 @@ df_performance = load_performance_data()
 
 layout = html.Div([
     create_navbar(),
+    dcc.Download(id="download-pdf"),
     dbc.Container([
         # Header
         dbc.Row([
@@ -381,18 +391,229 @@ def update_dashboard(season_filter, team_filter, sort_goals, sort_assists, sort_
     
     return fig1, fig2, table, goals_color, assists_color, minutes_color
 
+def generate_pdf_report(season_filter='all', team_filter='all', sort_by='Goals'):
+    """Generar reporte PDF con datos y gráficos"""
+    
+    # Filtrar datos igual que en el dashboard
+    filtered_df = df_performance.copy()
+    
+    if season_filter == 'all':
+        agg_functions = {
+            'Goals': 'sum',
+            'Assists': 'sum', 
+            'Minutes_played': 'sum',
+            'Shots': 'sum',
+            'xG': 'sum',
+            'xA': 'sum',
+            'Player': 'first',
+            'Team': lambda x: ' / '.join(x.unique()),
+            'Position': 'first',
+            'Age': 'first',
+            'Temporada': lambda x: 'Acumulado'
+        }
+        filtered_df = filtered_df.groupby('Wyscout id').agg(agg_functions).reset_index()
+    else:
+        filtered_df = filtered_df[filtered_df['Temporada'] == season_filter]
+    
+    if team_filter != 'all':
+        filtered_df = filtered_df[filtered_df['Team'] == team_filter]
+    
+    # Filtrar jugadores con mínimo 10 disparos
+    filtered_df = filtered_df[filtered_df['Shots'] >= 10]
+    
+    # Crear PDF en memoria
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=A4)
+    styles = getSampleStyleSheet()
+    story = []
+    
+    # Título del reporte
+    title_style = ParagraphStyle(
+        'CustomTitle',
+        parent=styles['Heading1'],
+        fontSize=20,
+        spaceAfter=30,
+        alignment=1  # Centrado
+    )
+    
+    story.append(Paragraph("Reporte de Performance Deportivo", title_style))
+    story.append(Spacer(1, 12))
+    
+    # Información del reporte
+    info_style = styles['Normal']
+    story.append(Paragraph(f"<b>Fecha de generación:</b> {datetime.now().strftime('%d/%m/%Y %H:%M')}", info_style))
+    story.append(Paragraph(f"<b>Temporada:</b> {'Todas (Acumulado)' if season_filter == 'all' else season_filter}", info_style))
+    story.append(Paragraph(f"<b>Equipo:</b> {'Todos' if team_filter == 'all' else team_filter}", info_style))
+    story.append(Spacer(1, 20))
+    
+    # Generar gráficos como en el dashboard
+    # Gráfico 1: Goles vs Disparos Intentados
+    hover_data = ['Player', 'Goals', 'Shots', 'Team']
+    
+    fig1 = px.scatter(
+        filtered_df, 
+        x='Shots', 
+        y='Goals',
+        color='Team',
+        size='Minutes_played',
+        hover_data=hover_data,
+        title=f"Goles vs Disparos Intentados {'(Acumulado todas las temporadas)' if season_filter == 'all' else f'(Temporada {season_filter})'}",
+        labels={'Shots': 'Disparos Intentados', 'Goals': 'Goles Totales'}
+    )
+    
+    # Agregar línea de referencia para disparos promedio si hay datos
+    if len(filtered_df) > 0:
+        avg_shots = filtered_df['Shots'].mean()
+        fig1.add_vline(
+            x=avg_shots,
+            line_dash="dash",
+            line_color="red",
+            annotation_text=f"Disparos promedio: {avg_shots:.1f}"
+        )
+    
+    fig1.update_layout(
+        height=400,
+        showlegend=False,
+        width=600
+    )
+    
+    # Convertir gráfico 1 a imagen
+    img1_bytes = pio.to_image(fig1, format="png", width=600, height=400)
+    img1_buffer = BytesIO(img1_bytes)
+    img1 = Image(img1_buffer, width=5*inch, height=3.3*inch)
+    
+    story.append(img1)
+    story.append(Spacer(1, 20))
+    
+    # Gráfico 2: Top 10 Goles + Asistencias (horizontal)
+    filtered_df['Goals_Assists'] = filtered_df['Goals'] + filtered_df['Assists']
+    top_performers = filtered_df.nlargest(10, 'Goals_Assists')[['Player', 'Team', 'Goals', 'Assists', 'Goals_Assists']]
+    
+    # Crear datos para gráfico de barras horizontales
+    bar_data = []
+    for _, row in top_performers.iterrows():
+        bar_data.append({'Player': row['Player'], 'Métrica': 'Goles', 'Cantidad': row['Goals'], 'Team': row['Team']})
+        bar_data.append({'Player': row['Player'], 'Métrica': 'Asistencias', 'Cantidad': row['Assists'], 'Team': row['Team']})
+    
+    bar_df = pd.DataFrame(bar_data)
+    
+    fig2 = px.bar(
+        bar_df,
+        x='Cantidad',
+        y='Player',
+        color='Métrica',
+        orientation='h',
+        title=f"Top 10 Jugadores - Contribución Ofensiva {'(Acumulado)' if season_filter == 'all' else f'(Temporada {season_filter})'}",
+        labels={'Cantidad': 'Cantidad', 'Player': 'Jugador'},
+        color_discrete_map={'Goles': '#1f77b4', 'Asistencias': '#ff7f0e'}
+    )
+    fig2.update_layout(
+        height=450,
+        width=600,
+        yaxis={'categoryorder': 'total ascending'},
+        margin=dict(l=150)
+    )
+    
+    # Convertir gráfico 2 a imagen
+    img2_bytes = pio.to_image(fig2, format="png", width=600, height=450)
+    img2_buffer = BytesIO(img2_bytes)
+    img2 = Image(img2_buffer, width=5*inch, height=3.8*inch)
+    
+    story.append(img2)
+    story.append(Spacer(1, 20))
+    
+    # Top 10 jugadores (según ordenamiento seleccionado)
+    sort_titles = {
+        'Goals': 'Top 10 Jugadores por Goles',
+        'Assists': 'Top 10 Jugadores por Asistencias', 
+        'Minutes_played': 'Top 10 Jugadores por Minutos'
+    }
+    story.append(Paragraph(sort_titles.get(sort_by, 'Top 10 Jugadores'), styles['Heading2']))
+    
+    # Mapear nombres de columnas para ordenamiento
+    sort_column = sort_by if sort_by in ['Goals', 'Assists', 'Minutes_played'] else 'Goals'
+    top_players = filtered_df.nlargest(10, sort_column)[['Player', 'Team', 'Goals', 'Assists', 'Minutes_played']].round(0)
+    
+    players_data = [['Jugador', 'Equipo', 'Goles', 'Asistencias', 'Minutos']]
+    for _, row in top_players.iterrows():
+        players_data.append([
+            str(row['Player'])[:20],  # Limitar longitud del nombre
+            str(row['Team'])[:15],    # Limitar longitud del equipo
+            f"{row['Goals']:.0f}",
+            f"{row['Assists']:.0f}",
+            f"{row['Minutes_played']:.0f}"
+        ])
+    
+    players_table = Table(players_data)
+    players_table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+        ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+        ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
+        ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+        ('FONTSIZE', (0, 0), (-1, 0), 10),
+        ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+        ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+        ('GRID', (0, 0), (-1, -1), 1, colors.black),
+        ('FONTSIZE', (0, 1), (-1, -1), 9)
+    ]))
+    
+    story.append(players_table)
+    
+    # Generar el PDF
+    doc.build(story)
+    buffer.seek(0)
+    
+    return buffer.getvalue()
+
 @callback(
-    Output('export-status', 'children'),
-    Input('export-pdf-btn', 'n_clicks'),
+    [Output('export-status', 'children'),
+     Output('download-pdf', 'data')],
+    [Input('export-pdf-btn', 'n_clicks')],
+    [State('season-filter', 'value'),
+     State('team-filter', 'value'),
+     State('sort-goals', 'n_clicks'),
+     State('sort-assists', 'n_clicks'),
+     State('sort-minutes', 'n_clicks')],
     prevent_initial_call=True
 )
-def export_to_pdf(n_clicks):
+def export_to_pdf(n_clicks, season_filter, team_filter, goals_clicks, assists_clicks, minutes_clicks):
     """Manejar exportación a PDF"""
     if n_clicks:
-        return dbc.Alert(
-            "Funcionalidad de exportación PDF en desarrollo. "
-            "Los datos están listos para ser exportados.",
-            color="info",
-            duration=4000
-        )
-    return ""
+        try:
+            # Determinar ordenamiento actual basado en los clicks
+            # El último botón clickeado determina el ordenamiento
+            max_clicks = max(goals_clicks or 0, assists_clicks or 0, minutes_clicks or 0)
+            
+            if assists_clicks == max_clicks and assists_clicks > 0:
+                sort_by = 'Assists'
+            elif minutes_clicks == max_clicks and minutes_clicks > 0:
+                sort_by = 'Minutes_played'
+            else:
+                sort_by = 'Goals'  # Default
+            
+            # Generar PDF
+            pdf_data = generate_pdf_report(season_filter, team_filter, sort_by)
+            
+            # Nombre de archivo simple
+            filename = "Reporte.pdf"
+            
+            return (
+                dbc.Alert(
+                    "¡PDF generado exitosamente! La descarga comenzará automáticamente.",
+                    color="success",
+                    duration=4000
+                ),
+                dcc.send_bytes(pdf_data, filename)
+            )
+            
+        except Exception as e:
+            return (
+                dbc.Alert(
+                    f"Error generando PDF: {str(e)}",
+                    color="danger",
+                    duration=6000
+                ),
+                None
+            )
+    
+    return "", None
