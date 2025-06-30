@@ -61,7 +61,7 @@ try:
     from pages.login import layout as login_layout
     from pages.home import layout as home_layout  
     from pages.performance import layout as performance_layout
-    from pages.gps import layout as gps_layout
+    from pages.adm import layout as gps_layout
 
     # Crear objetos página simples
     class SimplePage:
