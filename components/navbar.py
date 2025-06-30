@@ -13,7 +13,7 @@ def create_navbar():
             children=[
                 dbc.NavItem(dbc.NavLink("Home", href="/", active="exact")),
                 dbc.NavItem(dbc.NavLink("Performance", href="/performance", active="exact")),
-                dbc.NavItem(dbc.NavLink("GPS", href="/gps", active="exact")),
+                dbc.NavItem(dbc.NavLink("Administrativo", href="/gps", active="exact")),
                 dbc.DropdownMenu(
                     children=[
                         dbc.DropdownMenuItem("Perfil", header=True),
@@ -50,7 +50,7 @@ def create_fallback_navbar():
             children=[
                 dbc.NavItem(dbc.NavLink("Home", href="/")),
                 dbc.NavItem(dbc.NavLink("Performance", href="/performance")),
-                dbc.NavItem(dbc.NavLink("GPS", href="/gps")),
+                dbc.NavItem(dbc.NavLink("Administrativo", href="/gps")),
                 dbc.NavItem(dbc.NavLink("Logout", href="/login")),
             ],
             brand="Dashboard Deportivo",
@@ -78,7 +78,7 @@ def create_minimal_navbar():
                     html.Div([
                         html.A("Home", href="/", style={"color": "white", "margin": "0 10px"}),
                         html.A("Performance", href="/performance", style={"color": "white", "margin": "0 10px"}),
-                        html.A("GPS", href="/gps", style={"color": "white", "margin": "0 10px"}),
+                        html.A("Administrativo", href="/gps", style={"color": "white", "margin": "0 10px"}),
                         html.A("Logout", href="/login", style={"color": "white", "margin": "0 10px"}),
                     ], style={"display": "flex"})
                 ], style={
@@ -109,7 +109,7 @@ def create_emergency_navbar():
                 html.P("Navegación: ", style={"color": "white", "margin": "5px 0"}),
                 html.A("Home", href="/", style={"color": "lightblue", "margin-right": "10px"}),
                 html.A("Performance", href="/performance", style={"color": "lightblue", "margin-right": "10px"}),
-                html.A("GPS", href="/gps", style={"color": "lightblue", "margin-right": "10px"}),
+                html.A("Administrativo", href="/gps", style={"color": "lightblue", "margin-right": "10px"}),
                 html.A("Login", href="/login", style={"color": "lightblue"})
             ], style={
                 "background-color": "#dc3545",
@@ -137,7 +137,7 @@ def validate_navbar(navbar):
         navbar_str = str(navbar)
         
         # Verificar elementos críticos
-        required_elements = ["Home", "Performance", "GPS", "Dashboard"]
+        required_elements = ["Home", "Performance", "Administrativo", "Dashboard"]
         for element in required_elements:
             if element not in navbar_str:
                 logger.warning(f"Elemento '{element}' no encontrado en navbar")

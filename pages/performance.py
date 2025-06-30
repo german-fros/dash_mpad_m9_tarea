@@ -183,7 +183,7 @@ layout = html.Div([
         dbc.Row([
             dbc.Col([
                 dbc.Card([
-                    dbc.CardHeader(html.H5("Goles vs Eficiencia de Goles (Goles/Disparos)")),
+                    dbc.CardHeader(html.H5("Goles vs Disparos")),
                     dbc.CardBody([
                         dcc.Graph(id='goals-efficiency-scatter')
                     ])
@@ -299,7 +299,7 @@ def update_dashboard(season_filter, team_filter, sort_goals, sort_assists, sort_
         filtered_df = filtered_df[filtered_df['Temporada'] == season_filter]
     
     if team_filter != 'all':
-        filtered_df = filtered_df[filtered_df['Team'] == team_filter]
+        filtered_df = filtered_df[filtered_df['Team'].str.contains(team_filter, case=False, na=False)]
     
     # Filtrar jugadores con mínimo 10 disparos intentados
     filtered_df = filtered_df[filtered_df['Shots'] >= 10]
@@ -314,7 +314,6 @@ def update_dashboard(season_filter, team_filter, sort_goals, sort_assists, sort_
         color='Team',
         size='Minutes_played',
         hover_data=hover_data,
-        title=f"Goles vs Disparos Intentados {'(Acumulado todas las temporadas)' if season_filter == 'all' else f'(Temporada {season_filter})'}",
         labels={'Shots': 'Disparos Intentados', 'Goals': 'Goles Totales'}
     )
     
@@ -351,7 +350,6 @@ def update_dashboard(season_filter, team_filter, sort_goals, sort_assists, sort_
         y='Player',
         color='Métrica',
         orientation='h',  # Horizontal
-        title=f"Top 10 Jugadores - Contribución Ofensiva {'(Acumulado)' if season_filter == 'all' else f'(Temporada {season_filter})'}",
         labels={'Cantidad': 'Cantidad', 'Player': 'Jugador'},
         color_discrete_map={'Goles': '#1f77b4', 'Asistencias': '#ff7f0e'}
     )
@@ -360,6 +358,8 @@ def update_dashboard(season_filter, team_filter, sort_goals, sort_assists, sort_
         yaxis={'categoryorder': 'total ascending'},  # Ordenar por total
         margin=dict(l=150)  # Más margen izquierdo para nombres
     )
+    fig2.update_xaxes(title_text="")
+    fig2.update_yaxes(title_text="")
     
     # Tabla de top jugadores
     # Determinar ordenamiento basado en el botón presionado
@@ -416,7 +416,7 @@ def generate_pdf_report(season_filter='all', team_filter='all', sort_by='Goals')
         filtered_df = filtered_df[filtered_df['Temporada'] == season_filter]
     
     if team_filter != 'all':
-        filtered_df = filtered_df[filtered_df['Team'] == team_filter]
+        filtered_df = filtered_df[filtered_df['Team'].str.contains(team_filter, case=False, na=False)]
     
     # Filtrar jugadores con mínimo 10 disparos
     filtered_df = filtered_df[filtered_df['Shots'] >= 10]
@@ -513,6 +513,8 @@ def generate_pdf_report(season_filter='all', team_filter='all', sort_by='Goals')
         yaxis={'categoryorder': 'total ascending'},
         margin=dict(l=150)
     )
+    fig2.update_xaxes(title_text="")
+    fig2.update_yaxes(title_text="")
     
     # Convertir gráfico 2 a imagen
     img2_bytes = pio.to_image(fig2, format="png", width=600, height=450)
