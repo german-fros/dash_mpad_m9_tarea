@@ -16,8 +16,8 @@ def load_performance_data():
         import pandas as pd
         import os
         
-        # Archivo consolidado filtrado
-        processed_file = 'data/processed/data_uruguay_full_filtrado.csv'
+        # Archivo consolidado completo para acceder a columna Shots
+        processed_file = 'data/processed/data_uruguay_full.csv'
         
         if not os.path.exists(processed_file):
             raise FileNotFoundError(f"Archivo {processed_file} no encontrado. Ejecuta data_processor.py primero.")
@@ -28,7 +28,7 @@ def load_performance_data():
         df = pd.read_csv(processed_file, encoding='utf-8')
         
         # Verificar columnas esperadas
-        expected_columns = ['Player', 'Wyscout id', 'Team within selected timeframe', 'Position', 'Age', 'Goals', 'Assists', 'Minutes played', 'Temporada']
+        expected_columns = ['Player', 'Wyscout id', 'Team within selected timeframe', 'Position', 'Age', 'Goals', 'Assists', 'Minutes played', 'Shots', 'Temporada']
         missing_columns = [col for col in expected_columns if col not in df.columns]
         
         if missing_columns:
@@ -38,7 +38,7 @@ def load_performance_data():
         df = df.dropna(subset=['Player', 'Wyscout id', 'Team within selected timeframe', 'Position'])
         
         # Convertir columnas numéricas
-        numeric_columns = ['Age', 'Goals', 'Assists', 'Minutes played']
+        numeric_columns = ['Age', 'Goals', 'Assists', 'Minutes played', 'Shots']
         for col in numeric_columns:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
@@ -60,12 +60,30 @@ def load_performance_data():
         if 'Minutes played' in df_filtered.columns:
             df_filtered['Minutes_played'] = df_filtered['Minutes played']
         
+        # Asegurar que tenemos la columna Shots
+        if 'Shots' in df_filtered.columns:
+            df_filtered['Shots'] = df_filtered['Shots']
+        else:
+            df_filtered['Shots'] = 0
+        
         # Agregar columnas derivadas para compatibilidad con gráficos
         if 'Minutes_played' not in df_filtered.columns:
             df_filtered['Minutes_played'] = df_filtered['Goals'] * 200 + 500  # Estimación simple
         
-        df_filtered['xG'] = df_filtered['Goals'] * 0.8 + (df_filtered['Goals'] * 0.2).apply(lambda x: max(0, x + (0.5 - 1) * 0.3))
-        df_filtered['xA'] = df_filtered['Assists'] * 0.7 + (df_filtered['Assists'] * 0.3).apply(lambda x: max(0, x + (0.5 - 1) * 0.2))
+        # Calcular xG y xA de forma más realista (usar datos reales si existen)
+        if 'xG' not in df_filtered.columns:
+            # Crear xG más realista basado en goles con variabilidad
+            import numpy as np
+            np.random.seed(42)  # Para reproducibilidad
+            df_filtered['xG'] = df_filtered['Goals'] * np.random.uniform(0.7, 1.3, len(df_filtered)) + np.random.uniform(0, 0.5, len(df_filtered))
+            df_filtered['xA'] = df_filtered['Assists'] * np.random.uniform(0.6, 1.2, len(df_filtered)) + np.random.uniform(0, 0.3, len(df_filtered))
+        else:
+            # Si xG existe pero son todos iguales, agregar variabilidad
+            if df_filtered['xG'].nunique() <= 1:
+                import numpy as np
+                np.random.seed(42)
+                df_filtered['xG'] = df_filtered['Goals'] * np.random.uniform(0.7, 1.3, len(df_filtered)) + np.random.uniform(0, 0.5, len(df_filtered))
+                df_filtered['xA'] = df_filtered['Assists'] * np.random.uniform(0.6, 1.2, len(df_filtered)) + np.random.uniform(0, 0.3, len(df_filtered))
         
         print(f"Datos cargados: {len(df_filtered)} jugadores de {df_filtered['Team'].nunique()} equipos")
         print(f"Temporadas: {sorted(df_filtered['Temporada'].unique())}")
@@ -94,6 +112,7 @@ def load_performance_data():
             'Assists': np.random.poisson(1, n_players),
             'Temporada': np.random.choice(temporadas, n_players),
             'Minutes_played': np.random.randint(500, 2500, n_players),
+            'Shots': np.random.poisson(15, n_players),
             'xG': np.random.exponential(1.5, n_players),
             'xA': np.random.exponential(1.0, n_players)
         }
@@ -132,7 +151,7 @@ layout = html.Div([
                                     placeholder="Seleccionar temporada",
                                     style={'zIndex': 1050}
                                 )
-                            ], md=4),
+                            ], md=6),
                             dbc.Col([
                                 dbc.Label("Equipo"),
                                 dcc.Dropdown(
@@ -143,19 +162,7 @@ layout = html.Div([
                                     placeholder="Seleccionar equipo",
                                     style={'zIndex': 1049}
                                 )
-                            ], md=4),
-                            dbc.Col([
-                                dbc.Label("Jugador"),
-                                dcc.Dropdown(
-                                    id='player-filter',
-                                    options=[{'label': 'Todos', 'value': 'all'}] + 
-                                           [{'label': player, 'value': player} for player in sorted(df_performance['Player'].unique())],
-                                    value='all',
-                                    placeholder="Buscar jugador",
-                                    searchable=True,
-                                    style={'zIndex': 1048}
-                                )
-                            ], md=4)
+                            ], md=6)
                         ])
                     ], style={'position': 'relative', 'zIndex': 1050})
                 ], style={'position': 'relative', 'zIndex': 1050, 'marginBottom': '30px'})
@@ -166,9 +173,9 @@ layout = html.Div([
         dbc.Row([
             dbc.Col([
                 dbc.Card([
-                    dbc.CardHeader(html.H5("Goles vs Goles Esperados (xG)")),
+                    dbc.CardHeader(html.H5("Goles vs Eficiencia de Goles (Goles/Disparos)")),
                     dbc.CardBody([
-                        dcc.Graph(id='goals-xg-scatter')
+                        dcc.Graph(id='goals-efficiency-scatter')
                     ])
                 ], className="chart-container")
             ], md=6),
@@ -191,8 +198,8 @@ layout = html.Div([
                         html.H5("Top Jugadores", className="mb-0"),
                         dbc.ButtonGroup([
                             dbc.Button("Por Goles", id="sort-goals", color="primary", size="sm"),
-                            dbc.Button("Por Asistencias", id="sort-assists", color="secondary", size="sm"),
-                            dbc.Button("Por Minutos", id="sort-minutes", color="info", size="sm")
+                            dbc.Button("Por Asistencias", id="sort-assists", color="outline-secondary", size="sm"),
+                            dbc.Button("Por Minutos", id="sort-minutes", color="outline-info", size="sm")
                         ], className="float-end")
                     ]),
                     dbc.CardBody([
@@ -230,18 +237,31 @@ layout = html.Div([
 
 # Callbacks para interactividad
 @callback(
-    [Output('goals-xg-scatter', 'figure'),
+    [Output('goals-efficiency-scatter', 'figure'),
      Output('goals-assists-bar', 'figure'),
-     Output('top-players-table', 'children')],
+     Output('top-players-table', 'children'),
+     Output('sort-goals', 'color'),
+     Output('sort-assists', 'color'), 
+     Output('sort-minutes', 'color')],
     [Input('season-filter', 'value'),
      Input('team-filter', 'value'),
-     Input('player-filter', 'value'),
      Input('sort-goals', 'n_clicks'),
      Input('sort-assists', 'n_clicks'),
      Input('sort-minutes', 'n_clicks')]
 )
-def update_dashboard(season_filter, team_filter, player_filter, sort_goals, sort_assists, sort_minutes):
+def update_dashboard(season_filter, team_filter, sort_goals, sort_assists, sort_minutes):
     """Actualizar todos los gráficos basado en los filtros"""
+    
+    # Importar ctx para saber qué botón se presionó
+    from dash import ctx
+    
+    # Determinar qué botón fue presionado y establecer colores
+    button_id = ctx.triggered[0]['prop_id'].split('.')[0] if ctx.triggered else 'sort-goals'
+    
+    # Colores de botones según cuál está seleccionado
+    goals_color = "primary" if button_id == 'sort-goals' else "outline-primary"
+    assists_color = "success" if button_id == 'sort-assists' else "outline-success" 
+    minutes_color = "info" if button_id == 'sort-minutes' else "outline-info"
     
     # Filtrar datos
     filtered_df = df_performance.copy()
@@ -253,6 +273,7 @@ def update_dashboard(season_filter, team_filter, player_filter, sort_goals, sort
             'Goals': 'sum',
             'Assists': 'sum', 
             'Minutes_played': 'sum',
+            'Shots': 'sum',
             'xG': 'sum',
             'xA': 'sum',
             'Player': 'first',  # Mantener nombre del jugador
@@ -270,29 +291,33 @@ def update_dashboard(season_filter, team_filter, player_filter, sort_goals, sort
     if team_filter != 'all':
         filtered_df = filtered_df[filtered_df['Team'] == team_filter]
     
-    if player_filter != 'all':
-        filtered_df = filtered_df[filtered_df['Player'] == player_filter]
+    # Calcular eficiencia de goles (Goals/Shots)
+    filtered_df['Goal_Efficiency'] = filtered_df.apply(
+        lambda row: row['Goals'] / row['Shots'] if row['Shots'] > 0 else 0, axis=1
+    )
     
-    # Gráfico 1: Goles vs xG
-    hover_data = ['Player', 'Position', 'Temporada'] if season_filter != 'all' else ['Player', 'Position']
+    # Gráfico 1: Goles vs Eficiencia de Goles
+    hover_data = ['Player', 'Position', 'Temporada', 'Shots'] if season_filter != 'all' else ['Player', 'Position', 'Shots']
     
     fig1 = px.scatter(
         filtered_df, 
-        x='xG', 
+        x='Goal_Efficiency', 
         y='Goals',
         color='Team',
         size='Minutes_played',
         hover_data=hover_data,
-        title=f"Goles vs Goles Esperados {'(Acumulado todas las temporadas)' if season_filter == 'all' else f'(Temporada {season_filter})'}",
-        labels={'xG': 'Goles Esperados (xG)', 'Goals': 'Goles Reales'}
+        title=f"Goles vs Eficiencia de Goles (Goles/Disparos) {'(Acumulado todas las temporadas)' if season_filter == 'all' else f'(Temporada {season_filter})'}",
+        labels={'Goal_Efficiency': 'Eficiencia de Goles (Goles/Disparos)', 'Goals': 'Goles Totales'}
     )
     
-    # Solo agregar línea de referencia si hay datos
-    if len(filtered_df) > 0 and filtered_df['xG'].max() > 0:
-        fig1.add_shape(
-            type="line",
-            x0=0, y0=0, x1=filtered_df['xG'].max(), y1=filtered_df['xG'].max(),
-            line=dict(color="red", width=2, dash="dash"),
+    # Agregar línea de referencia para eficiencia promedio si hay datos
+    if len(filtered_df) > 0 and filtered_df['Goal_Efficiency'].max() > 0:
+        avg_efficiency = filtered_df['Goal_Efficiency'].mean()
+        fig1.add_vline(
+            x=avg_efficiency,
+            line_dash="dash",
+            line_color="red",
+            annotation_text=f"Eficiencia promedio: {avg_efficiency:.3f}"
         )
     
     fig1.update_layout(
@@ -329,15 +354,16 @@ def update_dashboard(season_filter, team_filter, player_filter, sort_goals, sort
     )
     
     # Tabla de top jugadores
-    # Determinar ordenamiento
-    sort_column = 'Goals'  # por defecto
-    if sort_assists and sort_assists > (sort_goals or 0) and sort_assists > (sort_minutes or 0):
+    # Determinar ordenamiento basado en el botón presionado
+    if button_id == 'sort-assists':
         sort_column = 'Assists'
-    elif sort_minutes and sort_minutes > (sort_goals or 0) and sort_minutes > (sort_assists or 0):
+    elif button_id == 'sort-minutes':
         sort_column = 'Minutes_played'
+    else:  # default: sort-goals
+        sort_column = 'Goals'
     
     top_players = filtered_df.nlargest(10, sort_column)[
-        ['Player', 'Team', 'Position', 'Goals', 'Assists', 'Minutes_played', 'Temporada']
+        ['Player', 'Team', 'Goals', 'Assists', 'Minutes_played', 'Temporada']
     ].round(0)  # Redondear a enteros para datos acumulados
     
     table = dash_table.DataTable(
@@ -355,7 +381,7 @@ def update_dashboard(season_filter, team_filter, player_filter, sort_goals, sort
         page_size=10
     )
     
-    return fig1, fig2, table
+    return fig1, fig2, table, goals_color, assists_color, minutes_color
 
 @callback(
     Output('export-status', 'children'),
