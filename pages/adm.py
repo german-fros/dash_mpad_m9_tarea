@@ -6,11 +6,14 @@ import plotly.graph_objects as go
 import sys
 import os
 from datetime import datetime, date
+from functools import lru_cache
+import hashlib
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from components.navbar import create_navbar
 
-# Función para cargar y procesar datos de contratos
+# Función para cargar y procesar datos de contratos con cache
+@lru_cache(maxsize=1)
 def load_contracts_data():
     """Cargar y procesar datos de contratos con posiciones simplificadas"""
     try:
@@ -127,6 +130,27 @@ def load_contracts_data():
         
         return pd.DataFrame(data)
 
+# Cache para operaciones de filtrado administrativo
+@lru_cache(maxsize=32)
+def get_filtered_contracts_data(club_filter, position_filter, salary_min, salary_max):
+    """Cache para datos de contratos filtrados"""
+    df = load_contracts_data()
+    
+    # Filtrar por club
+    filtered_df = df[df['Club'] == club_filter]
+    
+    if position_filter != 'all':
+        filtered_df = filtered_df[filtered_df['Posicion_Simplificada'] == position_filter]
+    
+    # Filtrar por rango salarial
+    if salary_min is not None and salary_max is not None:
+        filtered_df = filtered_df[
+            (filtered_df['Salario_mensual_usd'] >= salary_min) & 
+            (filtered_df['Salario_mensual_usd'] <= salary_max)
+        ]
+    
+    return filtered_df.copy()
+
 # Cargar datos
 df_contracts = load_contracts_data()
 
@@ -197,7 +221,11 @@ layout = html.Div([
                 dbc.Card([
                     dbc.CardHeader(html.H5("Salarios Promedio por Posición")),
                     dbc.CardBody([
-                        dcc.Graph(id='salary-position-chart')
+                        dcc.Loading(
+                            id="loading-salary-chart",
+                            type="default",
+                            children=[dcc.Graph(id='salary-position-chart')]
+                        )
                     ])
                 ])
             ], md=6),
@@ -206,7 +234,11 @@ layout = html.Div([
                 dbc.Card([
                     dbc.CardHeader(html.H5("Contratos que Vencen por Semestre")),
                     dbc.CardBody([
-                        dcc.Graph(id='contracts-timeline-chart')
+                        dcc.Loading(
+                            id="loading-timeline-chart",
+                            type="default",
+                            children=[dcc.Graph(id='contracts-timeline-chart')]
+                        )
                     ])
                 ])
             ], md=6)
@@ -225,7 +257,11 @@ layout = html.Div([
                         ], className="float-end")
                     ]),
                     dbc.CardBody([
-                        html.Div(id='contracts-table')
+                        dcc.Loading(
+                            id="loading-contracts-table",
+                            type="default",
+                            children=[html.Div(id='contracts-table')]
+                        )
                     ])
                 ])
             ])
@@ -263,21 +299,10 @@ def update_admin_dashboard(club_filter, position_filter, salary_range, sort_date
     position_color = "success" if button_id == 'sort-position' else "outline-success"
     salary_color = "info" if button_id == 'sort-salary' else "outline-info"
     
-    # Filtrar datos
-    filtered_df = df_contracts.copy()
-    
-    # Siempre filtrar por el club seleccionado (ya no hay opción 'all')
-    filtered_df = filtered_df[filtered_df['Club'] == club_filter]
-    
-    if position_filter != 'all':
-        filtered_df = filtered_df[filtered_df['Posicion_Simplificada'] == position_filter]
-    
-    # Filtrar por rango salarial
-    if salary_range:
-        filtered_df = filtered_df[
-            (filtered_df['Salario_mensual_usd'] >= salary_range[0]) & 
-            (filtered_df['Salario_mensual_usd'] <= salary_range[1])
-        ]
+    # Usar datos filtrados con cache
+    salary_min = salary_range[0] if salary_range else None
+    salary_max = salary_range[1] if salary_range else None
+    filtered_df = get_filtered_contracts_data(club_filter, position_filter, salary_min, salary_max)
     
     # Gráfico 1: Salarios promedio por posición
     salary_by_position = filtered_df.groupby('Posicion_Simplificada')['Salario_mensual_usd'].mean().reset_index()

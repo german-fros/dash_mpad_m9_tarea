@@ -14,11 +14,14 @@ from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, Tabl
 from reportlab.lib.units import inch
 import plotly.io as pio
 from datetime import datetime
+from functools import lru_cache
+import hashlib
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from components.navbar import create_navbar
 
-# Función para cargar y procesar datos
+# Función para cargar y procesar datos con cache
+@lru_cache(maxsize=1)
 def load_performance_data():
     """Cargar datos del archivo consolidado filtrado"""
     try:
@@ -128,6 +131,23 @@ def load_performance_data():
         
         return pd.DataFrame(data)
 
+# Cache para operaciones de filtrado
+@lru_cache(maxsize=32)
+def get_filtered_performance_data(season_filter, team_filter, min_shots=10):
+    """Cache para datos filtrados por temporada y equipo"""
+    df = load_performance_data()
+    
+    # Filtrar por temporada específica
+    filtered_df = df[df['Temporada'] == season_filter]
+    
+    if team_filter != 'all':
+        filtered_df = filtered_df[filtered_df['Team'].str.contains(team_filter, case=False, na=False)]
+    
+    # Filtrar jugadores con mínimo de disparos
+    filtered_df = filtered_df[filtered_df['Shots'] >= min_shots]
+    
+    return filtered_df.copy()
+
 # Cargar datos
 df_performance = load_performance_data()
 
@@ -184,7 +204,11 @@ layout = html.Div([
                 dbc.Card([
                     dbc.CardHeader(html.H5("Goles vs Disparos")),
                     dbc.CardBody([
-                        dcc.Graph(id='goals-efficiency-scatter')
+                        dcc.Loading(
+                            id="loading-scatter",
+                            type="default",
+                            children=[dcc.Graph(id='goals-efficiency-scatter')]
+                        )
                     ])
                 ], className="chart-container")
             ], md=6),
@@ -193,7 +217,11 @@ layout = html.Div([
                 dbc.Card([
                     dbc.CardHeader(html.H5("Top 10 Jugadores - Goles + Asistencias")),
                     dbc.CardBody([
-                        dcc.Graph(id='goals-assists-bar')
+                        dcc.Loading(
+                            id="loading-bar",
+                            type="default",
+                            children=[dcc.Graph(id='goals-assists-bar')]
+                        )
                     ])
                 ], className="chart-container")
             ], md=6)
@@ -212,7 +240,11 @@ layout = html.Div([
                         ], className="float-end")
                     ]),
                     dbc.CardBody([
-                        html.Div(id='top-players-table')
+                        dcc.Loading(
+                            id="loading-table",
+                            type="default",
+                            children=[html.Div(id='top-players-table')]
+                        )
                     ])
                 ])
             ])
@@ -272,17 +304,8 @@ def update_dashboard(season_filter, team_filter, sort_goals, sort_assists, sort_
     assists_color = "success" if button_id == 'sort-assists' else "outline-success" 
     minutes_color = "info" if button_id == 'sort-minutes' else "outline-info"
     
-    # Filtrar datos
-    filtered_df = df_performance.copy()
-    
-    # Filtrar por temporada específica
-    filtered_df = filtered_df[filtered_df['Temporada'] == season_filter]
-    
-    if team_filter != 'all':
-        filtered_df = filtered_df[filtered_df['Team'].str.contains(team_filter, case=False, na=False)]
-    
-    # Filtrar jugadores con mínimo 10 disparos intentados
-    filtered_df = filtered_df[filtered_df['Shots'] >= 10]
+    # Usar datos filtrados con cache
+    filtered_df = get_filtered_performance_data(season_filter, team_filter, min_shots=10)
     
     # Gráfico 1: Goles vs Disparos Intentados
     hover_data = ['Player', 'Goals', 'Shots', 'Team']
@@ -374,17 +397,8 @@ def update_dashboard(season_filter, team_filter, sort_goals, sort_assists, sort_
 def generate_pdf_report(season_filter, team_filter='all', sort_by='Goals'):
     """Generar reporte PDF con datos y gráficos"""
     
-    # Filtrar datos igual que en el dashboard
-    filtered_df = df_performance.copy()
-    
-    # Filtrar por temporada específica
-    filtered_df = filtered_df[filtered_df['Temporada'] == season_filter]
-    
-    if team_filter != 'all':
-        filtered_df = filtered_df[filtered_df['Team'].str.contains(team_filter, case=False, na=False)]
-    
-    # Filtrar jugadores con mínimo 10 disparos
-    filtered_df = filtered_df[filtered_df['Shots'] >= 10]
+    # Usar datos filtrados con cache igual que en el dashboard
+    filtered_df = get_filtered_performance_data(season_filter, team_filter, min_shots=10)
     
     # Crear PDF en memoria
     buffer = BytesIO()
