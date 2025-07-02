@@ -258,6 +258,44 @@ def navbar_logout_callback(n_clicks):
         logger.error(f"Error en navbar_logout_callback: {str(e)}")
         return "/"
 
+# Callback para navegación desde Home button
+@app.callback(
+    Output("url", "pathname", allow_duplicate=True),
+    Input("navbar-home", "n_clicks"),
+    prevent_initial_call=True
+)
+def navbar_home_callback(n_clicks):
+    """Navegación a Home desde navbar"""
+    try:
+        if not n_clicks or n_clicks == 0:
+            return "/"
+            
+        logger.info("Navegando a Home desde navbar")
+        return "/"
+        
+    except Exception as e:
+        logger.error(f"Error en navbar_home_callback: {str(e)}")
+        return "/"
+
+# Callback para navegación desde Home button fallback
+@app.callback(
+    Output("url", "pathname", allow_duplicate=True),
+    Input("navbar-home-fallback", "n_clicks"),
+    prevent_initial_call=True
+)
+def navbar_home_fallback_callback(n_clicks):
+    """Navegación a Home desde navbar fallback"""
+    try:
+        if not n_clicks or n_clicks == 0:
+            return "/"
+            
+        logger.info("Navegando a Home desde navbar fallback")
+        return "/"
+        
+    except Exception as e:
+        logger.error(f"Error en navbar_home_fallback_callback: {str(e)}")
+        return "/"
+
 if __name__ == "__main__":
     try:
         logger.info("Iniciando aplicación...")

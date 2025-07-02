@@ -354,8 +354,7 @@ def update_admin_dashboard(club_filter, position_filter, salary_range, sort_date
     else:  # default: sort-date
         table_data = table_data.sort_values('Fecha_fin')
     
-    # Tomar los primeros 15 registros después del ordenamiento
-    table_data = table_data.head(15)
+    # Mostrar todos los registros después del ordenamiento
     
     # Formatear fechas y monedas para la tabla
     table_data['Fecha_inicio'] = table_data['Fecha_inicio'].dt.strftime('%d/%m/%Y')
@@ -378,7 +377,7 @@ def update_admin_dashboard(club_filter, position_filter, salary_range, sort_date
                 'color': 'black',
             }
         ],
-        page_size=15,
+        page_size=50,
         style_table={'overflowX': 'auto'}
     )
     

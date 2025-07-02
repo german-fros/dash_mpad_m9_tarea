@@ -11,7 +11,7 @@ def create_navbar():
         # Intentar crear navbar completo
         navbar = dbc.NavbarSimple(
             children=[
-                dbc.NavItem(dbc.NavLink("Home", href="/", active="exact")),
+                dbc.NavItem(dbc.NavLink("Home", id="navbar-home", href="/", active="exact")),
                 dbc.NavItem(dbc.NavLink("Performance", href="/performance", active="exact")),
                 dbc.NavItem(dbc.NavLink("Administrativo", href="/administrativo", active="exact")),
                 dbc.DropdownMenu(
@@ -48,7 +48,7 @@ def create_fallback_navbar():
     try:
         navbar = dbc.NavbarSimple(
             children=[
-                dbc.NavItem(dbc.NavLink("Home", href="/")),
+                dbc.NavItem(dbc.NavLink("Home", id="navbar-home-fallback", href="/")),
                 dbc.NavItem(dbc.NavLink("Performance", href="/performance")),
                 dbc.NavItem(dbc.NavLink("Administrativo", href="/administrativo")),
                 dbc.NavItem(dbc.NavLink("Logout", href="/login")),

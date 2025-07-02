@@ -155,9 +155,8 @@ layout = html.Div([
                                 dbc.Label("Temporada"),
                                 dcc.Dropdown(
                                     id='season-filter',
-                                    options=[{'label': 'Todas', 'value': 'all'}] + 
-                                           [{'label': season, 'value': season} for season in sorted(df_performance['Temporada'].unique())],
-                                    value='all',
+                                    options=[{'label': season, 'value': season} for season in sorted(df_performance['Temporada'].unique())],
+                                    value=sorted(df_performance['Temporada'].unique())[0] if len(df_performance['Temporada'].unique()) > 0 else None,
                                     placeholder="Seleccionar temporada",
                                     style={'zIndex': 1050}
                                 )
@@ -276,27 +275,8 @@ def update_dashboard(season_filter, team_filter, sort_goals, sort_assists, sort_
     # Filtrar datos
     filtered_df = df_performance.copy()
     
-    # Si se selecciona "Todas" las temporadas, hacer acumulado por jugador
-    if season_filter == 'all':
-        # Agrupar por Wyscout id (identificador único del jugador)
-        agg_functions = {
-            'Goals': 'sum',
-            'Assists': 'sum', 
-            'Minutes_played': 'sum',
-            'Shots': 'sum',
-            'xG': 'sum',
-            'xA': 'sum',
-            'Player': 'first',  # Mantener nombre del jugador
-            'Team': lambda x: ' / '.join(x.unique()),  # Mostrar todos los equipos donde jugó
-            'Position': 'first',  # Tomar la primera posición
-            'Age': 'first',  # Tomar la primera edad
-            'Temporada': lambda x: 'Acumulado'  # Marcar como acumulado
-        }
-        
-        filtered_df = filtered_df.groupby('Wyscout id').agg(agg_functions).reset_index()
-        
-    else:
-        filtered_df = filtered_df[filtered_df['Temporada'] == season_filter]
+    # Filtrar por temporada específica
+    filtered_df = filtered_df[filtered_df['Temporada'] == season_filter]
     
     if team_filter != 'all':
         filtered_df = filtered_df[filtered_df['Team'].str.contains(team_filter, case=False, na=False)]
@@ -391,29 +371,14 @@ def update_dashboard(season_filter, team_filter, sort_goals, sort_assists, sort_
     
     return fig1, fig2, table, goals_color, assists_color, minutes_color
 
-def generate_pdf_report(season_filter='all', team_filter='all', sort_by='Goals'):
+def generate_pdf_report(season_filter, team_filter='all', sort_by='Goals'):
     """Generar reporte PDF con datos y gráficos"""
     
     # Filtrar datos igual que en el dashboard
     filtered_df = df_performance.copy()
     
-    if season_filter == 'all':
-        agg_functions = {
-            'Goals': 'sum',
-            'Assists': 'sum', 
-            'Minutes_played': 'sum',
-            'Shots': 'sum',
-            'xG': 'sum',
-            'xA': 'sum',
-            'Player': 'first',
-            'Team': lambda x: ' / '.join(x.unique()),
-            'Position': 'first',
-            'Age': 'first',
-            'Temporada': lambda x: 'Acumulado'
-        }
-        filtered_df = filtered_df.groupby('Wyscout id').agg(agg_functions).reset_index()
-    else:
-        filtered_df = filtered_df[filtered_df['Temporada'] == season_filter]
+    # Filtrar por temporada específica
+    filtered_df = filtered_df[filtered_df['Temporada'] == season_filter]
     
     if team_filter != 'all':
         filtered_df = filtered_df[filtered_df['Team'].str.contains(team_filter, case=False, na=False)]
@@ -442,7 +407,7 @@ def generate_pdf_report(season_filter='all', team_filter='all', sort_by='Goals')
     # Información del reporte
     info_style = styles['Normal']
     story.append(Paragraph(f"<b>Fecha de generación:</b> {datetime.now().strftime('%d/%m/%Y %H:%M')}", info_style))
-    story.append(Paragraph(f"<b>Temporada:</b> {'Todas (Acumulado)' if season_filter == 'all' else season_filter}", info_style))
+    story.append(Paragraph(f"<b>Temporada:</b> {season_filter}", info_style))
     story.append(Paragraph(f"<b>Equipo:</b> {'Todos' if team_filter == 'all' else team_filter}", info_style))
     story.append(Spacer(1, 20))
     
@@ -457,7 +422,7 @@ def generate_pdf_report(season_filter='all', team_filter='all', sort_by='Goals')
         color='Team',
         size='Minutes_played',
         hover_data=hover_data,
-        title=f"Goles vs Disparos Intentados {'(Acumulado todas las temporadas)' if season_filter == 'all' else f'(Temporada {season_filter})'}",
+        title=f"Goles vs Disparos Intentados (Temporada {season_filter})",
         labels={'Shots': 'Disparos Intentados', 'Goals': 'Goles Totales'}
     )
     
@@ -503,7 +468,7 @@ def generate_pdf_report(season_filter='all', team_filter='all', sort_by='Goals')
         y='Player',
         color='Métrica',
         orientation='h',
-        title=f"Top 10 Jugadores - Contribución Ofensiva {'(Acumulado)' if season_filter == 'all' else f'(Temporada {season_filter})'}",
+        title=f"Top 10 Jugadores - Contribución Ofensiva (Temporada {season_filter})",
         labels={'Cantidad': 'Cantidad', 'Player': 'Jugador'},
         color_discrete_map={'Goles': '#1f77b4', 'Asistencias': '#ff7f0e'}
     )
