@@ -1,3 +1,22 @@
+"""
+Dashboard Deportivo - Aplicación Principal
+==========================================
+
+Este módulo contiene la aplicación principal del Dashboard Deportivo, una aplicación web
+desarrollada con Dash/Flask que proporciona análisis de rendimiento deportivo y gestión
+administrativa de contratos de jugadores.
+
+Arquitectura:
+- Flask como servidor backend con autenticación Flask-Login
+- Dash para la interfaz interactiva y visualizaciones
+- Sistema de routing multi-página
+- Manejo robusto de errores con múltiples niveles de fallback
+- Logging comprehensivo para debugging y monitoreo
+
+Autor: Dashboard Deportivo Team
+Fecha: 2024
+"""
+
 from dash import Dash, dcc, html, Input, Output, State
 import dash_bootstrap_components as dbc
 from flask import Flask
@@ -7,22 +26,30 @@ import traceback
 
 from login_manager import get_user, authenticate_user
 
-# Configurar logging
+# ========================================
+# CONFIGURACIÓN DE LOGGING Y SERVIDOR
+# ========================================
+
+# Configurar sistema de logging para debugging y monitoreo
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('app.log'),
-        logging.StreamHandler()
+        logging.FileHandler('app.log'),  # Log a archivo para persistencia
+        logging.StreamHandler()          # Log a consola para desarrollo
     ]
 )
 logger = logging.getLogger(__name__)
 
-# Flask base
-server = Flask(__name__)
-server.secret_key = 'super-secret-key'
+# ========================================
+# SERVIDOR FLASK Y AUTENTICACIÓN
+# ========================================
 
-# Login manager con manejo de errores
+# Crear servidor Flask base para integración con Dash
+server = Flask(__name__)
+server.secret_key = 'super-secret-key'  # TODO: Mover a variable de entorno en producción
+
+# Configurar Flask-Login para manejo de sesiones de usuario
 login_manager = LoginManager()
 try:
     login_manager.init_app(server)
@@ -33,7 +60,18 @@ except Exception as e:
 
 @login_manager.user_loader
 def load_user(user_id):
-    """Cargar usuario con manejo de errores"""
+    """
+    Callback requerido por Flask-Login para cargar usuario desde ID de sesión.
+    
+    Args:
+        user_id (str): ID único del usuario almacenado en sesión
+        
+    Returns:
+        User object o None si usuario no encontrado
+        
+    Note:
+        Incluye manejo de errores para prevenir crashes por usuarios inválidos
+    """
     try:
         user = get_user(user_id)
         if user:
@@ -43,58 +81,79 @@ def load_user(user_id):
         logger.error(f"Error cargando usuario {user_id}: {str(e)}")
         return None
 
-# Dash app
+# ========================================
+# APLICACIÓN DASH
+# ========================================
+
+# Crear aplicación Dash integrada con Flask server
 try:
     app = Dash(
         __name__,
-        server=server,
-        external_stylesheets=[dbc.themes.BOOTSTRAP],
-        suppress_callback_exceptions=True
+        server=server,                                    # Usar Flask server existente
+        external_stylesheets=[dbc.themes.BOOTSTRAP],     # Bootstrap para styling
+        suppress_callback_exceptions=True                # Permitir callbacks dinámicos
     )
     logger.info("Aplicación Dash inicializada correctamente")
 except Exception as e:
     logger.error(f"Error inicializando aplicación Dash: {str(e)}")
     raise
 
-# Importar páginas con manejo de errores
+# ========================================
+# IMPORTACIÓN DE PÁGINAS Y LAYOUTS
+# ========================================
+
+# Importar layouts de todas las páginas con manejo robusto de errores
 try:
     from pages.login import layout as login_layout
     from pages.home import layout as home_layout  
     from pages.performance import layout as performance_layout
     from pages.adm import layout as adm_layout
 
-    # Crear objetos página simples
+    # Wrapper simple para layouts - facilita manejo uniforme
     class SimplePage:
+        """Contenedor simple para layouts de página"""
         def __init__(self, layout):
             self.layout = layout
 
-    login = SimplePage(login_layout)
-    home = SimplePage(home_layout)
-    performance = SimplePage(performance_layout)
-    adm = SimplePage(adm_layout)
+    # Crear objetos página para cada sección de la aplicación
+    login = SimplePage(login_layout)          # Página de autenticación
+    home = SimplePage(home_layout)            # Dashboard principal  
+    performance = SimplePage(performance_layout)  # Análisis de rendimiento
+    adm = SimplePage(adm_layout)              # Panel administrativo
     
     logger.info("Páginas importadas correctamente")
 except ImportError as e:
     logger.error(f"Error importando páginas: {str(e)}")
-    # Crear layouts de fallback
+    
+    # Sistema de fallback: crear layouts de emergencia si falla importación
     class FallbackPage:
+        """Página de fallback cuando falla carga de layouts principales"""
         layout = html.Div([
             dbc.Alert("Error cargando página", color="danger"),
             html.P("Por favor, recarga la aplicación")
         ])
     
+    # Usar páginas de fallback para todas las secciones
     login = home = performance = adm = FallbackPage()
 
-# Layout principal con manejo de errores
+# ========================================
+# LAYOUT PRINCIPAL Y ROUTING
+# ========================================
+
+# Configurar layout principal de la aplicación (estructura SPA)
 try:
     app.layout = dbc.Container([
-        dcc.Location(id='url', refresh=False),
-        html.Div(id='page-content')
+        dcc.Location(id='url', refresh=False),  # Componente de routing sin refresh
+        html.Div(id='page-content')             # Contenedor dinámico para páginas
     ])
     logger.info("Layout principal configurado correctamente")
 except Exception as e:
     logger.error(f"Error configurando layout: {str(e)}")
     app.layout = html.Div("Error de configuración")
+
+# ========================================
+# CALLBACKS DE ROUTING Y NAVEGACIÓN
+# ========================================
 
 @app.callback(
     Output('page-content', 'children'),
@@ -102,19 +161,39 @@ except Exception as e:
     prevent_initial_call=False
 )
 def display_page(pathname):
-    """Routing con manejo de errores"""
+    """
+    Callback principal de routing - determina qué página mostrar según URL.
+    
+    Maneja la navegación entre diferentes secciones de la aplicación y
+    verifica autenticación para páginas protegidas.
+    
+    Args:
+        pathname (str): Ruta URL actual (ej: '/', '/performance', '/login')
+        
+    Returns:
+        dash.html.Div: Layout de la página correspondiente o redirección
+        
+    Rutas disponibles:
+        - '/' o '': Dashboard principal (requiere autenticación)
+        - '/login': Página de login
+        - '/performance': Análisis de rendimiento (requiere autenticación)
+        - '/administrativo': Panel administrativo (requiere autenticación)
+    """
     try:
-        # Validar pathname
+        # Normalizar pathname para manejo consistente
         if pathname is None:
             pathname = '/'
         
         logger.info(f"Navegando a: {pathname}")
         
+        # === PÁGINA DE LOGIN (Pública) ===
         if pathname == '/login':
             return login.layout
+            
+        # === PÁGINA PRINCIPAL (Protegida) ===
         elif pathname == '/' or pathname == '':
-            # Verificar autenticación
             try:
+                # Verificar si usuario está autenticado antes de mostrar dashboard
                 if current_user.is_authenticated:
                     return home.layout
                 else:
@@ -124,6 +203,7 @@ def display_page(pathname):
                 logger.error(f"Error verificando autenticación: {str(auth_error)}")
                 return dcc.Location(href="/login", id="redirect-to-login")
                 
+        # === PÁGINA DE PERFORMANCE (Protegida) ===
         elif pathname == '/performance':
             try:
                 if current_user.is_authenticated:
@@ -134,6 +214,7 @@ def display_page(pathname):
                 logger.error(f"Error en página performance: {str(auth_error)}")
                 return dbc.Alert("Error cargando página de performance", color="danger")
                 
+        # === PÁGINA ADMINISTRATIVA (Protegida) ===
         elif pathname == '/administrativo':
             try:
                 if current_user.is_authenticated:
@@ -143,6 +224,8 @@ def display_page(pathname):
             except Exception as auth_error:
                 logger.error(f"Error en página administrativa: {str(auth_error)}")
                 return dbc.Alert("Error cargando página administrativa", color="danger")
+                
+        # === PÁGINA NO ENCONTRADA (404) ===
         else:
             logger.warning(f"Página no encontrada: {pathname}")
             return html.Div([
@@ -151,12 +234,17 @@ def display_page(pathname):
             ])
             
     except Exception as e:
+        # Capturar cualquier error no manejado en routing
         logger.error(f"Error en display_page: {str(e)}\n{traceback.format_exc()}")
         return dbc.Alert([
             html.H4("Error de navegación"),
             html.P(f"Ha ocurrido un error: {str(e)}"),
             dbc.Button("Ir a Login", href="/login", color="primary")
         ], color="danger")
+
+# ========================================
+# CALLBACKS DE AUTENTICACIÓN
+# ========================================
 
 @app.callback(
     Output("login-output", "children"),
@@ -166,7 +254,25 @@ def display_page(pathname):
     prevent_initial_call=True
 )
 def login_callback(n_clicks, username, password):
-    """Login con manejo de errores"""
+    """
+    Callback para procesar intentos de login del usuario.
+    
+    Valida credenciales, maneja errores de autenticación y redirige
+    al dashboard principal en caso de login exitoso.
+    
+    Args:
+        n_clicks (int): Número de clicks en botón de login
+        username (str): Nombre de usuario ingresado
+        password (str): Contraseña ingresada
+        
+    Returns:
+        dash component: Mensaje de error o redirección a dashboard
+        
+    Security Notes:
+        - Valida campos vacíos antes de autenticación
+        - Logs intentos fallidos para monitoreo de seguridad
+        - No expone información sensible en logs
+    """
     try:
         # Validar que se hizo click
         if not n_clicks or n_clicks == 0:
