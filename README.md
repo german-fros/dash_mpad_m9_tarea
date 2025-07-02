@@ -118,11 +118,10 @@ La aplicación estará disponible en: `http://localhost:8050`
   - Scatter plot: Goles vs Disparos (con línea de eficiencia promedio)
   - Bar chart: Top 10 jugadores en contribución ofensiva
 - **Tabla Dinámica**: Ranking personalizable por goles, asistencias o minutos
-- **Exportación PDF**: Reportes profesionales con gráficos incluidos
+- **Exportación PDF**: Reportes con gráficos incluidos
 
 #### Métricas Analizadas:
 - Goles y asistencias totales
-- Expected Goals (xG) y Expected Assists (xA)
 - Eficiencia de disparos
 - Minutos jugados y participación
 
@@ -139,7 +138,7 @@ La aplicación estará disponible en: `http://localhost:8050`
 
 #### Funcionalidades de Tabla:
 - Ordenamiento por fecha de fin, posición o salario
-- Mostrar todos los contratos (sin límite de filas)
+- Mostrar todos los contratos
 - Información detallada: fechas, salarios, cláusulas de rescisión
 
 ## Optimizaciones de Performance
